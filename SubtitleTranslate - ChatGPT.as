@@ -2,13 +2,13 @@
     Real-time subtitle translation for PotPlayer using OpenAI ChatGPT API
 */
 
-// Plugin Information Functions
+// 插件信息函数
 string GetTitle() {
-    return "{$CP949=ChatGPT 번역$}{$CP950=ChatGPT 翻譯$}{$CP0=ChatGPT Translate$}";
+    return "{$CP949=OpenAI 번역$}{$CP950=OpenAI 翻譯$}{$CP0=OpenAI Translate$}";
 }
 
 string GetVersion() {
-    return "2.0";
+    return "2.0"; // 插件版本
 }
 
 string GetDesc() {
@@ -37,91 +37,86 @@ string selected_model = "gpt-4o-mini"; // Default model
 string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
 string apiUrl = "https://api.openai.com/v1/chat/completions"; // Added apiUrl definition
 
-// Supported Language List
-array<string> LangTable =
-{
+// 支持的语言列表
+array<string> LangTable = {
     "{$CP0=Auto Detect$}", "af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca",
-    "ceb", "ny", "zh-CN",
-    "zh-TW", "co", "hr", "cs", "da", "nl", "en", "eo", "et", "tl", "fi", "fr",
+    "ceb", "ny", "zh-CN", "zh-TW", "co", "hr", "cs", "da", "nl", "en", "eo", "et", "tl", "fi", "fr",
     "fy", "gl", "ka", "de", "el", "gu", "ht", "ha", "haw", "he", "hi", "hmn", "hu", "is", "ig", "id", "ga", "it", "ja", "jw", "kn", "kk", "km",
     "ko", "ku", "ky", "lo", "la", "lv", "lt", "lb", "mk", "ms", "mg", "ml", "mt", "mi", "mr", "mn", "my", "ne", "no", "ps", "fa", "pl", "pt",
     "pa", "ro", "ru", "sm", "gd", "sr", "st", "sn", "sd", "si", "sk", "sl", "so", "es", "su", "sw", "sv", "tg", "ta", "te", "th", "tr", "uk",
     "ur", "uz", "vi", "cy", "xh", "yi", "yo", "zu"
 };
 
-// Get Source Language List
+// 获取源语言列表
 array<string> GetSrcLangs() {
     array<string> ret = LangTable;
     return ret;
 }
 
-// Get Destination Language List
+// 获取目标语言列表
 array<string> GetDstLangs() {
     array<string> ret = LangTable;
     return ret;
 }
 
-// Login Interface for entering model name and API Key
+// 登录接口：输入模型名称和 API 密钥
 string ServerLogin(string User, string Pass) {
-    // Trim whitespace
+    // 去除空白字符
     selected_model = User.Trim();
     api_key = Pass.Trim();
 
-    // selected_model.MakeLower();
-
-    // Validate model name
+    // 验证模型名称
     if (selected_model.empty()) {
-        HostPrintUTF8("{$CP0=Model name not entered. Please enter a valid model name.$}\n");
-        selected_model = "gpt-4o-mini"; // Default to gpt-4o-mini
+        HostPrintUTF8("{$CP0=未输入模型名称。请输入有效的模型名称。$}\n");
+        selected_model = "gpt-4o-mini"; // 默认模型
     }
 
-    // Validate API Key
+    // 验证 API 密钥
     if (api_key.empty()) {
-        HostPrintUTF8("{$CP0=API Key not configured. Please enter a valid API Key.$}\n");
+        HostPrintUTF8("{$CP0=未配置 API 密钥。请输入有效的 API 密钥。$}\n");
         return "fail";
     }
 
-    // Save settings to temporary storage
+    // 保存设置到临时存储
     HostSaveString("api_key", api_key);
     HostSaveString("selected_model", selected_model);
 
-    HostPrintUTF8("{$CP0=API Key and model name successfully configured.$}\n");
+    HostPrintUTF8("{$CP0=API 密钥和模型名称已成功配置。$}\n");
     return "200 ok";
 }
 
-// Logout Interface to clear model name and API Key
+// 登出接口：清除模型名称和 API 密钥
 void ServerLogout() {
     api_key = "";
     selected_model = "gpt-4o-mini";
     HostSaveString("api_key", "");
     HostSaveString("selected_model", selected_model);
-    HostPrintUTF8("{$CP0=Successfully logged out.$}\n");
+    HostPrintUTF8("{$CP0=已成功登出。$}\n");
 }
 
-// JSON String Escape Function
+// JSON 转义函数
 string JsonEscape(const string &in input) {
     string output = input;
-    output.replace("\\", "\\\\");
-    output.replace("\"", "\\\"");
-    output.replace("\n", "\\n");
-    output.replace("\r", "\\r");
-    output.replace("\t", "\\t");
+    output.replace("\\", "\\\\"); // 转义反斜杠
+    output.replace("\"", "\\\""); // 转义双引号
+    output.replace("\n", "\\n");  // 转义换行符
+    output.replace("\r", "\\r");  // 转义回车符
+    output.replace("\t", "\\t");  // 转义制表符
     return output;
 }
 
-// Global variables for storing previous subtitles
-array<string> subtitleHistory;
-string UNICODE_RLE = "\u202B"; // For Right-to-Left languages
+// 全局变量：右到左语言的标记
+string UNICODE_RLE = "\u202B";
 
-// Function to estimate token count based on character length
+// 估算 Token 数量的函数
 int EstimateTokenCount(const string &in text) {
-    // Rough estimation: average 4 characters per token
-    return int(float(text.length()) / 4); // Fixed division error by casting to float
+    // 粗略估算：平均 4 个字符对应 1 个 Token
+    return int(float(text.length()) / 4);
 }
 
-// Function to get the model's maximum context length
+// 获取模型最大上下文 Token 的函数
 int GetModelMaxTokens(const string &in modelName) {
-    // Define maximum tokens for known models
+    // 定义已知模型的最大 Token 限制
     if (modelName == "gpt-3.5-turbo") {
         return 4096;
     } else if (modelName == "gpt-3.5-turbo-16k") {
@@ -130,25 +125,27 @@ int GetModelMaxTokens(const string &in modelName) {
         return 128000;
     } else if (modelName == "gpt-4o-mini") {
         return 128000;
+    } else if (modelName == "Qwen/Qwen2.5-7B-Instruct") {
+        return 128000; // Qwen 的上下文 Token 限制
     } else {
-        // Default to a conservative limit
+        // 默认保守限制
         return 4096;
     }
 }
 
-// Translation Function
+// 翻译函数
 string Translate(string Text, string &in SrcLang, string &in DstLang) {
-    // Load API key and model name from temporary storage
+    // 从临时存储中加载 API 密钥和模型名称
     api_key = HostLoadString("api_key", "");
     selected_model = HostLoadString("selected_model", "gpt-4o-mini");
 
     if (api_key.empty()) {
-        HostPrintUTF8("{$CP0=API Key not configured. Please enter it in the settings menu.$}\n");
+        HostPrintUTF8("{$CP0=未配置 API 密钥。请在设置菜单中输入。$}\n");
         return "";
     }
 
     if (DstLang.empty() || DstLang == "{$CP0=Auto Detect$}") {
-        HostPrintUTF8("{$CP0=Target language not specified. Please select a target language.$}\n");
+        HostPrintUTF8("{$CP0=未指定目标语言。请选择目标语言。$}\n");
         return "";
     }
 
@@ -156,62 +153,51 @@ string Translate(string Text, string &in SrcLang, string &in DstLang) {
         SrcLang = "";
     }
 
-    // Add the current subtitle to the history
-    subtitleHistory.insertLast(Text);
-
-    // Get the model's maximum token limit
+    // 获取模型的最大 Token 限制
     int maxTokens = GetModelMaxTokens(selected_model);
 
-    // Build the context from the subtitle history
-    string context = "";
-    int tokenCount = EstimateTokenCount(Text); // Tokens used by the current subtitle
-    int i = int(subtitleHistory.length()) - 2; // Start from the previous subtitle
-    while (i >= 0 && tokenCount < (maxTokens - 1000)) { // Reserve tokens for response and prompt
-        string subtitle = subtitleHistory[i];
-        int subtitleTokens = EstimateTokenCount(subtitle);
-        tokenCount += subtitleTokens;
-        if (tokenCount < (maxTokens - 1000)) {
-            context = subtitle + "\n" + context;
-        }
-        i--;
+    // 估算当前字幕的 Token 数量
+    int tokenCount = EstimateTokenCount(Text);
+
+    // 检查是否超出上下文 Token 限制
+    if (tokenCount > maxTokens) {
+        HostPrintUTF8("{$CP0=输入文本超出模型最大上下文 Token 限制。请缩短输入内容。$}\n");
+        return "";
     }
 
-    // Limit the size of subtitleHistory to prevent it from growing indefinitely
-    if (subtitleHistory.length() > 1000) { // Increased limit for context
-        subtitleHistory.removeAt(0);
-    }
-
-    // Construct the prompt
+    // 构造提示（Prompt）
     string prompt = "You are a professional translator. Please translate the following subtitle, output only translated results. If content that violates the Terms of Service appears, just output the translation result that complies with safety standards.";
     if (!SrcLang.empty()) {
         prompt += " from " + SrcLang;
     }
-    prompt += " to " + DstLang + ". Use the context provided to maintain coherence.\n";
-    if (!context.empty()) {
-        prompt += "Context:\n" + context + "\n";
-    }
+    prompt += " to " + DstLang + ".\n";
+
+    // 指示模型使用之前的翻译上下文
+    prompt += "Use the context from previous translations to maintain coherence.\n";
+
+    // 添加待翻译的字幕
     prompt += "Subtitle to translate:\n" + Text;
 
-    // JSON escape
+    // JSON 转义
     string escapedPrompt = JsonEscape(prompt);
 
-    // Request data
-    string requestData = "{\"model\":\"" + selected_model + "\",\"messages\":[{\"role\":\"user\",\"content\":\"" + escapedPrompt + "\"}],\"max_tokens\":1000,\"temperature\":0}";
+    // 构建请求数据
+    string requestData = "{\"model\":\"" + selected_model + "\",\"messages\":[{\"role\":\"user\",\"content\":\"" + escapedPrompt + "\"}],\"max_tokens\":4096,\"temperature\":0}";
 
     string headers = "Authorization: Bearer " + api_key + "\nContent-Type: application/json";
 
-    // Send request
+    // 发送请求
     string response = HostUrlGetString(apiUrl, UserAgent, headers, requestData);
     if (response.empty()) {
-        HostPrintUTF8("{$CP0=Translation request failed. Please check network connection or API Key.$}\n");
+        HostPrintUTF8("{$CP0=翻译请求失败。请检查网络连接或 API 密钥。$}\n");
         return "";
     }
 
-    // Parse response
+    // 解析响应
     JsonReader Reader;
     JsonValue Root;
     if (!Reader.parse(response, Root)) {
-        HostPrintUTF8("{$CP0=Failed to parse API response.$}\n");
+        HostPrintUTF8("{$CP0=解析 API 响应失败。$}\n");
         return "";
     }
 
@@ -219,36 +205,36 @@ string Translate(string Text, string &in SrcLang, string &in DstLang) {
     if (choices.isArray() && choices[0]["message"]["content"].isString()) {
         string translatedText = choices[0]["message"]["content"].asString();
         if (DstLang == "fa" || DstLang == "ar" || DstLang == "he") {
-            translatedText = UNICODE_RLE + translatedText;
+            translatedText = UNICODE_RLE + translatedText; // 支持从右到左的语言
         }
         SrcLang = "UTF8";
         DstLang = "UTF8";
-        return translatedText.Trim(); // Trim to remove any extra whitespace
+        return translatedText.Trim(); // 去除多余空白
     }
 
-    // Handle API errors
+    // 处理 API 错误
     if (Root["error"]["message"].isString()) {
         string errorMessage = Root["error"]["message"].asString();
-        HostPrintUTF8("{$CP0=API Error: $}" + errorMessage + "\n");
+        HostPrintUTF8("{$CP0=API 错误：$}" + errorMessage + "\n");
     } else {
-        HostPrintUTF8("{$CP0=Translation failed. Please check input parameters or API Key configuration.$}\n");
+        HostPrintUTF8("{$CP0=翻译失败。请检查输入参数或 API 密钥配置。$}\n");
     }
 
     return "";
 }
 
-// Plugin Initialization
+// 插件初始化
 void OnInitialize() {
-    HostPrintUTF8("{$CP0=ChatGPT translation plugin loaded.$}\n");
-    // Load model name and API Key from temporary storage (if saved)
+    HostPrintUTF8("{$CP0=ChatGPT 翻译插件已加载。$}\n");
+    // 从临时存储中加载模型名称和 API 密钥（如果保存过）
     api_key = HostLoadString("api_key", "");
     selected_model = HostLoadString("selected_model", "gpt-4o-mini");
     if (!api_key.empty()) {
-        HostPrintUTF8("{$CP0=Saved API Key and model name loaded.$}\n");
+        HostPrintUTF8("{$CP0=已加载保存的 API 密钥和模型名称。$}\n");
     }
 }
 
-// Plugin Finalization
+// 插件卸载
 void OnFinalize() {
-    HostPrintUTF8("{$CP0=ChatGPT translation plugin unloaded.$}\n");
+    HostPrintUTF8("{$CP0=ChatGPT 翻译插件已卸载。$}\n");
 }
